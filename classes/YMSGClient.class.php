@@ -24,7 +24,8 @@ class YMSGClient {
   private $delimeter;
   private $notifier;
   private $msg;
-  
+  protected $start;
+  protected $timeout;
   public function __construct($server,$port) {
       $this->server = gethostbyname($server);
       $this->port = intval($port);
@@ -36,7 +37,7 @@ class YMSGClient {
       Events::bind('ymsg.cookie.got',function($args = array()){ $this->gotCookie($args);});
       Events::bind('ymsg.cookie.error',function($args = array()){ $this->onError($args);});
       Events::bind('ymsg.connected',function($args = array()){ $this->onConnect($args);});
-      Events::bind('ymsg.message.received',function($args = array()){$this->onMessage($args);});
+      Events::bind('ymsg.message',function($args = array()){$this->onMessage($args);});
       Events::bind('ymsg.disconnected',function($args = array()){$this->onDisconnect($args);});
   }  
   
@@ -47,6 +48,8 @@ class YMSGClient {
    * @param {string} $ypass - yahoo password
    */
   public function Connect($yid, $ypass) {
+      $this->start = NULL;
+      $this->timeout = ini_get('default_socket_timeout');
       printf("Attempting to connect to %s<br>",$this->server);
       $this->yid = $yid;
       //the following is unnecessary I suppose, it's just so if the object get print_r the password isn't plain text 
@@ -123,8 +126,7 @@ class YMSGClient {
         Events::trigger('ymsg.data.sent',$tmp);
       } else {
         Events::trigger('ymsg.disconnected', array('message'=>'Socket error.'));
-        throw new Exception("Error sending auth packet. ");
-        
+        throw new Exception("Error sending auth packet. ");        
       }
     } catch(Exception $ex) {
       Events::trigger('ymsg.disconnected', array('message'=>$ex->getMessage()));
@@ -172,26 +174,38 @@ class YMSGClient {
     }
     
     if($service =='85' || $service == 85) {         
-        include('views/loggedin.tpl');        
+        include('views/loggedin.tpl');            
     }
     
+    if ($service == '06' || $service == 6) {
+        $this->packet = $myString;
+        Events::trigger('ymsg.message', $myString);        
+    }
     if(! $this->socket) Events::trigger('ymsg.disconnected', array('message'=>'Packet issues. ' . $tmp));      
          
      try {
        $pstr = str_replace(chr(0),'.',utf8_encode( $tmp));
-        if(strlen($pstr)>0 && fwrite($this->socket,$tmp))
+        if(strlen($pstr)>0 && fwrite($this->socket,$tmp)) {
           Events::trigger('ymsg.data.sent', $tmp);
           unset($packet);         
+        } else {          
+           $recv = fread($this->socket,4096);                    
+           Events::trigger('ymsg.data.recv',$recv);             
+        }
           
       } catch(Exception $ex) {
         Events::trigger('ymsg.disconnected', array('message'=>$ex->getMessage()));
-      }      
+      }  
+    
+               
+    
+          
     //fclose($this->socket);       
     
   }
   
   public function onMessage($event) {
-    
+    include('views/messagedreceived.tpl');
   }
   
   public function onDisconnect($event) {
@@ -326,27 +340,8 @@ class YMSGClient {
     $ret = curl_exec($ch);
     curl_close($ch);
     return $ret;
-  }
-  
-  /**
-   * Notify - used to notify the user we've logged on.
-   * @param {string} user - person we're notifying
-   * @param {string} message - message to send
-   */
-  
-  public function NotifyUser() {
-    $packet = new InstantMessage('06');
-    $packet->setData(array('yid'=>$this->yid, 'recipient'=>$this->notifier,'message'=>$this->msg));
-     if( fwrite($this->socket,$packet)) {
-       Events::trigger('ymsg.data.sent', $packet);           
-     }
-  }
-  
-  public function setNotifier($user,$msg){
-    $this->notifier = $user;
-    $this->msg  = $msg;
-    
-  }
+  }  
+
   /**
    * Send a graceful logout packet.
    */
@@ -355,7 +350,17 @@ class YMSGClient {
           fclose($this->socket);
           Events::trigger("ymsg.disconnected",array('message'=>'Session ended by user'));
     }
+  } 
+  
+  public function getFrom($packet) {
+     return $this->getBetween($packet,'4' . $this->delimeter, $this->delimeter);
   }
+  public function getMessage($packet) {
+    return $this->getBetween($packet, '14' . $this->delimeter, $this->delimeter);    
+  }
+  
+  
+  
 }
 ob_end_flush();
 ?>
