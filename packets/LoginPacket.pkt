@@ -1,0 +1,19 @@
+<?php
+class LoginPacket extends Packet { 
+ 
+ public function setData($data) {
+    $this->service = '54';
+    $this->status = str_repeat(chr(0),3) . chr(0xC0); ;
+    $this->addField('1', trim($data['yid']));
+		$this->addField('0', trim($data['yid']));
+		$this->addField('277' ,trim($data['cookie']['Y']));
+		$this->addField('278', trim($data['cookie']['T']));
+		$this->addField('307',	trim($data['pwd']));		
+		$this->addField('244',	2097087);		   
+    $this->addField('2',		trim($data['yid']));		
+		$this->addField('2',	 1);
+    $this->addField('98',		'us'); 
+    $this->addField('135', '9,0,0,1389');
+ } 
+}
+?>

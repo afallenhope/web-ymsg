@@ -1,0 +1,11 @@
+<?php
+class Auth extends Packet {
+
+
+  
+  public function setData($data) {
+   $this->service = 87;    
+    $this->addField('1', $data['yid']);    
+  } 
+}
+?>
